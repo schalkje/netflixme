@@ -28,8 +28,6 @@ function withEnvDefaults(s: Settings): Settings {
   return {
     ...s,
     region: s.region || process.env.NEXT_PUBLIC_WATCH_REGION || "US",
-    simklClientId: s.simklClientId || process.env.SIMKL_CLIENT_ID || undefined,
-    simklClientSecret: s.simklClientSecret || process.env.SIMKL_CLIENT_SECRET || undefined,
     tmdbApiKey: s.tmdbApiKey || process.env.TMDB_API_KEY || undefined,
     omdbApiKey: s.omdbApiKey || process.env.OMDB_API_KEY || undefined,
   };

@@ -1,17 +1,15 @@
 import type { MediaType, UserStateRecord } from "./types";
 
-// A canonical key so Simkl-sourced state and TMDB-sourced catalog items line up.
-// Prefer imdb (shared across both), then tmdb, then simkl.
+// A canonical key so account-sourced state and TMDB-sourced catalog items line up.
+// Prefer imdb (shared across both), then tmdb.
 export function canonicalKey(args: {
   imdbId?: string;
   tmdbId?: number;
   type?: MediaType;
-  simklId?: number;
 }): string {
   if (args.imdbId) return args.imdbId;
   if (args.tmdbId != null && args.type) return `tmdb:${args.type}:${args.tmdbId}`;
-  if (args.simklId != null) return `simkl:${args.simklId}`;
-  return `unknown:${Math.random().toString(36).slice(2)}`;
+  return `unknown:${args.tmdbId ?? args.imdbId ?? ""}`;
 }
 
 // Build fast lookup maps from userState so a catalog item can match by either id.

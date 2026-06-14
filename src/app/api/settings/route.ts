@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSettings, updateSettings } from "@/lib/db";
-import { configStatus } from "@/lib/settings";
+import { configStatus, getOrCreateIngestToken } from "@/lib/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Never return secret values to the client — only presence + region.
-export async function GET() {
+// Returns presence flags + region, plus the ingest token & backend URL the
+// browser extension needs (this is a local, single-user app).
+export async function GET(req: NextRequest) {
   const s = getSettings();
+  const token = await getOrCreateIngestToken();
+  const backendUrl = process.env.APP_BASE_URL || req.nextUrl.origin;
   return NextResponse.json({
     region: s.region,
-    hasSimklClientId: Boolean(s.simklClientId),
-    hasSimklClientSecret: Boolean(s.simklClientSecret),
     hasTmdb: Boolean(s.tmdbApiKey),
     hasOmdb: Boolean(s.omdbApiKey),
+    ingestToken: token,
+    backendUrl,
     config: configStatus(),
   });
 }
@@ -26,9 +29,7 @@ export async function POST(req: NextRequest) {
   if (typeof body.region === "string" && body.region.trim()) {
     patch.region = body.region.trim().toUpperCase();
   }
-  // Only overwrite a key when a non-empty value is provided (lets the UI submit
-  // blanks to leave existing keys untouched).
-  for (const field of ["simklClientId", "simklClientSecret", "tmdbApiKey", "omdbApiKey"] as const) {
+  for (const field of ["tmdbApiKey", "omdbApiKey"] as const) {
     const v = str(body[field]);
     if (v) patch[field] = v;
   }

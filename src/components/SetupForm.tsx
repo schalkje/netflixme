@@ -5,30 +5,47 @@ import Link from "next/link";
 
 interface SettingsView {
   region: string;
-  hasSimklClientId: boolean;
-  hasSimklClientSecret: boolean;
   hasTmdb: boolean;
   hasOmdb: boolean;
-  config: { simklConnected: boolean };
+  ingestToken: string;
+  backendUrl: string;
 }
 
 function Status({ ok }: { ok: boolean }) {
+  return <span className={ok ? "text-green-400" : "text-muted"}>{ok ? "✓ set" : "— not set"}</span>;
+}
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
   return (
-    <span className={ok ? "text-green-400" : "text-muted"}>
-      {ok ? "✓ set" : "— not set"}
-    </span>
+    <div className="mb-2">
+      <label className="mb-1 block text-xs text-muted">{label}</label>
+      <div className="flex gap-2">
+        <input className="field font-mono text-xs" readOnly value={value} />
+        <button
+          type="button"
+          className="btn-ghost shrink-0"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(value);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            } catch {
+              /* ignore */
+            }
+          }}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+    </div>
   );
 }
 
 export default function SetupForm() {
   const [view, setView] = useState<SettingsView | null>(null);
   const [region, setRegion] = useState("");
-  const [fields, setFields] = useState({
-    simklClientId: "",
-    simklClientSecret: "",
-    tmdbApiKey: "",
-    omdbApiKey: "",
-  });
+  const [fields, setFields] = useState({ tmdbApiKey: "", omdbApiKey: "" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -54,7 +71,7 @@ export default function SetupForm() {
         body: JSON.stringify({ region, ...fields }),
       });
       if (!res.ok) throw new Error("Save failed");
-      setFields({ simklClientId: "", simklClientSecret: "", tmdbApiKey: "", omdbApiKey: "" });
+      setFields({ tmdbApiKey: "", omdbApiKey: "" });
       await load();
       setMsg("Saved.");
     } catch {
@@ -77,7 +94,7 @@ export default function SetupForm() {
       </div>
 
       <p className="mb-6 text-sm text-muted">
-        Keys are stored locally in <code>./.data</code> (gitignored) and are only used server-side.
+        Keys are stored locally in <code>./.data</code> (gitignored) and used only server-side.
         Leave a field blank to keep its existing value.
       </p>
 
@@ -104,32 +121,6 @@ export default function SetupForm() {
 
         <section className="rounded-lg border border-edge bg-panel/50 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="font-semibold">Simkl (your lists + watched)</h2>
-            <Status ok={!!view?.hasSimklClientId && !!view?.hasSimklClientSecret} />
-          </div>
-          <p className="mb-2 text-xs text-muted">
-            Create an app at simkl.com/settings/developer. Set its redirect URI to{" "}
-            <code>http://localhost:3000/api/auth/simkl/callback</code>.
-          </p>
-          <div className="flex flex-col gap-2">
-            <input className="field" placeholder="Simkl Client ID" value={fields.simklClientId} onChange={set("simklClientId")} />
-            <input className="field" placeholder="Simkl Client Secret" type="password" value={fields.simklClientSecret} onChange={set("simklClientSecret")} />
-          </div>
-          <div className="mt-3 text-xs">
-            {view?.config.simklConnected ? (
-              <span className="text-green-400">✓ Connected — authorize again from the home page if needed.</span>
-            ) : view?.hasSimklClientId && view?.hasSimklClientSecret ? (
-              <a className="text-brand underline" href="/api/auth/simkl">
-                Connect Simkl now →
-              </a>
-            ) : (
-              <span className="text-muted">Save your client id/secret first, then connect.</span>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-edge bg-panel/50 p-4">
-          <div className="mb-2 flex items-center justify-between">
             <h2 className="font-semibold">Region</h2>
             <span className="text-muted">{view?.region}</span>
           </div>
@@ -150,6 +141,23 @@ export default function SetupForm() {
           {msg && <span className="text-sm text-muted">{msg}</span>}
         </div>
       </form>
+
+      {/* Extension config — outside the form (read-only values to copy). */}
+      <section className="mt-6 rounded-lg border border-edge bg-panel/50 p-4">
+        <h2 className="mb-1 font-semibold">Read your Netflix (sync extension)</h2>
+        <p className="mb-3 text-xs text-muted">
+          Install the <b>netflixme sync</b> extension (the <code>extension/</code> folder, via{" "}
+          <code>chrome://extensions</code> → Load unpacked). In its Options, paste these two values.
+          It then reads your Netflix history + My List automatically. Or skip it and use{" "}
+          <b>Import CSV</b> on the home page.
+        </p>
+        {view && (
+          <>
+            <CopyField label="netflixme URL" value={view.backendUrl} />
+            <CopyField label="Ingest token" value={view.ingestToken} />
+          </>
+        )}
+      </section>
     </main>
   );
 }

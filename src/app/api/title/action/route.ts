@@ -5,7 +5,7 @@ import type { MediaType } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VALID: ActionKind[] = ["mylist", "seen", "dropped", "hidden", "remove", "rate"];
+const VALID: ActionKind[] = ["mylist", "seen", "dropped", "hidden", "remove"];
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -28,7 +28,6 @@ export async function POST(req: NextRequest) {
     title: typeof body.title === "string" ? body.title : "",
     imdbId: typeof body.imdbId === "string" ? body.imdbId : undefined,
     tmdbId: typeof body.tmdbId === "number" ? body.tmdbId : undefined,
-    rating: typeof body.rating === "number" ? body.rating : undefined,
   });
 
   return NextResponse.json({ ok: true, ...result });

@@ -1,50 +1,50 @@
-import { getSettings, updateSettings } from "./db";
-import { decrypt, encrypt } from "./crypto";
-import type { ConfigStatus, SimklTokens } from "./types";
+import crypto from "node:crypto";
+import { readDb, getSettings, updateSettings } from "./db";
+import type { ConfigStatus } from "./types";
+
+function counts() {
+  const us = readDb().userState;
+  let seen = 0;
+  let mylist = 0;
+  for (const e of Object.values(us)) {
+    if (e.status === "seen") seen++;
+    else if (e.status === "mylist") mylist++;
+  }
+  return { seen, mylist };
+}
 
 export function configStatus(): ConfigStatus {
   const s = getSettings();
-  const hasSimklClient = Boolean(s.simklClientId && s.simklClientSecret);
-  const simklConnected = Boolean(s.simklTokens?.accessToken);
-  const hasTmdb = Boolean(s.tmdbApiKey);
-  const hasOmdb = Boolean(s.omdbApiKey);
+  const c = counts();
   return {
-    hasSimklClient,
-    simklConnected,
-    hasTmdb,
-    hasOmdb,
+    hasTmdb: Boolean(s.tmdbApiKey),
+    hasOmdb: Boolean(s.omdbApiKey),
     region: s.region,
-    // Enough to render a catalog: we need TMDB (the Netflix catalog) at minimum.
-    // Simkl is what makes the filtering useful, but the app still works read-only
-    // without it.
-    ready: hasTmdb,
-    lastSyncAt: s.lastSyncAt,
+    // We need TMDB (the Netflix catalog) at minimum to render anything.
+    ready: Boolean(s.tmdbApiKey),
+    ingestConfigured: Boolean(s.ingestToken),
+    lastIngestAt: s.lastIngestAt,
     lastCatalogRefreshAt: s.lastCatalogRefreshAt,
+    seenCount: c.seen,
+    mylistCount: c.mylist,
   };
 }
 
-export async function setSimklTokens(tokens: SimklTokens | null): Promise<void> {
-  if (!tokens) {
-    await updateSettings({ simklTokens: null });
-    return;
-  }
-  await updateSettings({
-    simklTokens: {
-      ...tokens,
-      accessToken: encrypt(tokens.accessToken),
-      obtainedAt: tokens.obtainedAt ?? Date.now(),
-    },
-  });
+// The token the browser extension presents when POSTing to /api/ingest.
+// Generated once and reused; safe to display in the local Setup screen.
+export async function getOrCreateIngestToken(): Promise<string> {
+  const existing = getSettings().ingestToken;
+  if (existing) return existing;
+  const token = crypto.randomBytes(24).toString("hex");
+  await updateSettings({ ingestToken: token });
+  return token;
 }
 
-// Returns the decrypted access token, or null if not connected / undecryptable.
-export function getSimklAccessToken(): string | null {
-  const s = getSettings();
-  const enc = s.simklTokens?.accessToken;
-  if (!enc) return null;
-  try {
-    return decrypt(enc);
-  } catch {
-    return null;
-  }
+export function verifyIngestToken(presented: string | null): boolean {
+  const token = getSettings().ingestToken;
+  if (!token || !presented) return false;
+  // constant-time compare
+  const a = Buffer.from(token);
+  const b = Buffer.from(presented);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }

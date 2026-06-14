@@ -1,10 +1,4 @@
-import { mutate } from "./db";
-import { searchTitle } from "./tmdb";
-import { addToHistory } from "./simkl";
-import { getSimklAccessToken } from "./settings";
-import { canonicalKey } from "./ids";
-import { mapLimit } from "./concurrency";
-import type { UserStateRecord } from "./types";
+import { ingestHistory, touchIngest, type IngestSummary } from "./ingest";
 
 // Parse one CSV line, honoring double-quoted fields (Netflix quotes titles that
 // contain commas).
@@ -51,7 +45,6 @@ export function baseTitle(raw: string): string {
 export function parseNetflixCsv(text: string): string[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length === 0) return [];
-  // Detect + skip a header row that looks like "Title,Date".
   const first = parseCsvLine(lines[0]).map((c) => c.toLowerCase().trim());
   const startIdx = first[0] === "title" ? 1 : 0;
   const titles = new Set<string>();
@@ -63,54 +56,9 @@ export function parseNetflixCsv(text: string): string[] {
   return [...titles];
 }
 
-export interface BackfillResult {
-  total: number;
-  matched: string[];
-  unmatched: string[];
-  pushedToSimkl: boolean;
-}
-
-// Resolve each base title via TMDB, mark it seen locally, and (if connected)
-// push it to Simkl history so TV/phone watching is captured.
-export async function backfillFromCsv(baseTitles: string[]): Promise<BackfillResult> {
-  const connected = Boolean(getSimklAccessToken());
-  const matched: string[] = [];
-  const unmatched: string[] = [];
-  const updates: UserStateRecord[] = [];
-  const now = Date.now();
-
-  await mapLimit(baseTitles, 6, async (title) => {
-    const found = await searchTitle(title);
-    if (!found) {
-      unmatched.push(title);
-      return;
-    }
-    matched.push(title);
-    const ids = { tmdb: found.tmdbId };
-    if (connected) {
-      try {
-        await addToHistory(ids, found.type);
-      } catch {
-        /* keep local state even if Simkl push fails */
-      }
-    }
-    updates.push({
-      status: "seen",
-      source: "csv",
-      updatedAt: now,
-      type: found.type,
-      title: found.title,
-      tmdbId: found.tmdbId,
-    });
-  });
-
-  await mutate((db) => {
-    for (const u of updates) {
-      const key = canonicalKey({ imdbId: u.imdbId, tmdbId: u.tmdbId, type: u.type });
-      // Don't downgrade an existing stronger Simkl record.
-      if (!db.userState[key]) db.userState[key] = u;
-    }
-  });
-
-  return { total: baseTitles.length, matched, unmatched, pushedToSimkl: connected };
+// Resolve CSV titles and mark them seen (same pipeline the extension uses).
+export async function backfillFromCsv(baseTitles: string[]): Promise<IngestSummary> {
+  const result = await ingestHistory(baseTitles, "csv");
+  await touchIngest();
+  return result;
 }

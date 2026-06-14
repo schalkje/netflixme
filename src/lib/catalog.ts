@@ -63,7 +63,8 @@ async function enrich(titles: TmdbTitle[]): Promise<Record<string, TitleRecord>>
       poster: t.poster,
       overview: t.overview,
       imdbRating,
-      simklRating: t.tmdbRating,
+      tmdbRating: t.tmdbRating,
+      netflixId: cached?.netflixId,
       lastRefreshed: now,
     };
     return rec;
@@ -113,6 +114,7 @@ export async function buildCatalog(query: CatalogQuery): Promise<CatalogItem[]> 
       overview: rec.overview,
       imdbRating: rec.imdbRating,
       imdbId: rec.imdbId,
+      tmdbId: rec.tmdbId,
       status: state?.status ?? null,
       playUrl: play.url,
       playIsSearch: play.isSearch,

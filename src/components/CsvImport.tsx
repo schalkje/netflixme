@@ -6,7 +6,6 @@ interface BackfillResult {
   total: number;
   matched: string[];
   unmatched: string[];
-  pushedToSimkl: boolean;
 }
 
 export default function CsvImport({
@@ -53,7 +52,7 @@ export default function CsvImport({
         <p className="mb-4 text-sm text-muted">
           On Netflix (desktop browser): <b>Account → Profile → Viewing activity → Download all</b>.
           Upload that CSV here to mark everything you&apos;ve watched on TV/phone as seen — they then
-          drop out of your catalog. Matched titles are also pushed to Simkl when connected.
+          drop out of your catalog. This is the zero-setup fallback for the sync extension.
         </p>
 
         {!result ? (
@@ -78,11 +77,8 @@ export default function CsvImport({
           <div className="text-sm">
             <p className="mb-2">
               Parsed <b>{result.total}</b> unique titles. Matched{" "}
-              <b className="text-green-400">{result.matched.length}</b>, couldn&apos;t match{" "}
-              <b className="text-muted">{result.unmatched.length}</b>.
-              {result.pushedToSimkl
-                ? " Pushed to Simkl."
-                : " (Connect Simkl to also push these.)"}
+              <b className="text-green-400">{result.matched.length}</b> and marked them seen,
+              couldn&apos;t match <b className="text-muted">{result.unmatched.length}</b>.
             </p>
             {result.unmatched.length > 0 && (
               <details className="mt-2 text-muted">

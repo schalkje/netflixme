@@ -3,27 +3,30 @@
 export type MediaType = "movie" | "tv";
 
 // A title's status in the user's world.
-// - seen:   already watched (Simkl completed/history, or CSV backfill)
-// - mylist: want to watch (Simkl plantowatch)
-// - dropped:never want to see again (Simkl dropped)
-// - hidden: locally hidden in netflixme only (finer control, not pushed to Simkl)
+// - seen:   already watched (read from Netflix viewing activity, or CSV backfill)
+// - mylist: on your list (read from Netflix My List, or added locally)
+// - dropped:never want to see again (local)
+// - hidden: locally hidden in netflixme only
 export type UserStatus = "seen" | "mylist" | "dropped" | "hidden";
 
-export type StateSource = "simkl" | "csv" | "manual";
+// Where a piece of user state came from.
+// - netflix: read from your Netflix account (extension)
+// - csv:     imported from a Netflix viewing-activity CSV
+// - manual:  set inside netflixme
+export type StateSource = "netflix" | "csv" | "manual";
 
 export interface TitleRecord {
-  key: string; // canonical key (imdb id if known, else `tmdb:<type>:<id>`, else `simkl:<id>`)
+  key: string; // canonical key (imdb id if known, else `tmdb:<type>:<id>`)
   type: MediaType;
   title: string;
   year?: number;
   tmdbId?: number;
   imdbId?: string;
-  simklId?: number;
   poster?: string; // absolute URL
   overview?: string;
   imdbRating?: number; // 0-10
-  simklRating?: number; // 0-10
-  netflixId?: string; // Netflix title id, when resolvable
+  tmdbRating?: number; // 0-10
+  netflixId?: string; // Netflix title id, when learned from the account
   lastRefreshed: number; // epoch ms
 }
 
@@ -35,24 +38,15 @@ export interface UserStateRecord {
   title?: string;
   imdbId?: string;
   tmdbId?: number;
-  simklId?: number;
-}
-
-export interface SimklTokens {
-  accessToken: string; // stored encrypted at rest
-  tokenType?: string;
-  scope?: string;
-  obtainedAt?: number;
+  netflixId?: string;
 }
 
 export interface Settings {
   region: string; // ISO 3166-1 alpha-2, e.g. "NL"
-  simklClientId?: string;
-  simklClientSecret?: string;
   tmdbApiKey?: string;
   omdbApiKey?: string;
-  simklTokens?: SimklTokens | null;
-  lastSyncAt?: number;
+  ingestToken?: string; // shared secret the browser extension uses to POST data
+  lastIngestAt?: number;
   lastCatalogRefreshAt?: number;
 }
 
@@ -73,18 +67,20 @@ export interface CatalogItem {
   overview?: string;
   imdbRating?: number;
   imdbId?: string;
+  tmdbId?: number;
   status: UserStatus | null;
   playUrl: string;
   playIsSearch: boolean; // true when we fell back to a Netflix search deep-link
 }
 
 export interface ConfigStatus {
-  hasSimklClient: boolean;
-  simklConnected: boolean;
   hasTmdb: boolean;
   hasOmdb: boolean;
   region: string;
   ready: boolean; // enough config to show a catalog
-  lastSyncAt?: number;
+  ingestConfigured: boolean; // an ingest token exists (extension can sync)
+  lastIngestAt?: number;
   lastCatalogRefreshAt?: number;
+  seenCount: number;
+  mylistCount: number;
 }

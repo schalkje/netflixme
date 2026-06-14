@@ -17,10 +17,20 @@ export interface TmdbTitle {
   tmdbRating?: number;
 }
 
-function key(): string {
+// Accept either a v3 API key (sent as ?api_key=) or a long v4 read access token
+// (sent as Authorization: Bearer). People commonly have the v4 token.
+function tmdbRequest(path: string, params: Record<string, string>): {
+  url: string;
+  headers: Record<string, string>;
+} {
   const k = getSettings().tmdbApiKey;
   if (!k) throw new Error("TMDB API key not configured");
-  return k;
+  const sp = new URLSearchParams(params);
+  const isV4 = k.length > 40 || k.startsWith("eyJ");
+  const headers: Record<string, string> = {};
+  if (isV4) headers["Authorization"] = `Bearer ${k}`;
+  else sp.set("api_key", k);
+  return { url: `${API}/${path}?${sp.toString()}`, headers };
 }
 
 function posterUrl(path?: string | null): string | undefined {
@@ -58,17 +68,16 @@ export async function discoverNetflix(
   page: number
 ): Promise<{ items: TmdbTitle[]; totalPages: number }> {
   const path = type === "movie" ? "discover/movie" : "discover/tv";
-  const params = new URLSearchParams({
-    api_key: key(),
+  const { url, headers } = tmdbRequest(path, {
     with_watch_providers: String(NETFLIX_PROVIDER_ID),
     watch_region: region,
     sort_by: "popularity.desc",
     page: String(page),
     include_adult: "false",
   });
-  const data = await jsonFetch<{ results: DiscoverResult[]; total_pages: number }>(
-    `${API}/${path}?${params.toString()}`
-  );
+  const data = await jsonFetch<{ results: DiscoverResult[]; total_pages: number }>(url, {
+    headers,
+  });
   return {
     items: (data.results || []).map((r) => toTitle(r, type)),
     totalPages: data.total_pages || 1,
@@ -79,26 +88,24 @@ export async function discoverNetflix(
 export async function getImdbId(tmdbId: number, type: MediaType): Promise<string | undefined> {
   const path = type === "movie" ? `movie/${tmdbId}/external_ids` : `tv/${tmdbId}/external_ids`;
   try {
-    const data = await jsonFetch<{ imdb_id?: string }>(
-      `${API}/${path}?api_key=${key()}`
-    );
+    const { url, headers } = tmdbRequest(path, {});
+    const data = await jsonFetch<{ imdb_id?: string }>(url, { headers });
     return data.imdb_id || undefined;
   } catch {
     return undefined;
   }
 }
 
-// Resolve a free-text title (from the Netflix CSV) to a TMDB title.
+// Resolve a free-text title (from Netflix history / a CSV) to a TMDB title.
 export async function searchTitle(query: string): Promise<TmdbTitle | null> {
-  const params = new URLSearchParams({
-    api_key: key(),
-    query,
-    include_adult: "false",
-  });
   try {
-    const data = await jsonFetch<{
-      results: (DiscoverResult & { media_type?: string })[];
-    }>(`${API}/search/multi?${params.toString()}`);
+    const { url, headers } = tmdbRequest("search/multi", {
+      query,
+      include_adult: "false",
+    });
+    const data = await jsonFetch<{ results: (DiscoverResult & { media_type?: string })[] }>(url, {
+      headers,
+    });
     const hit = (data.results || []).find(
       (r) => r.media_type === "movie" || r.media_type === "tv"
     );

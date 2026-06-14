@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>netflixme sync — Options</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; background: #0b0b0f; color: #f5f5f7; margin: 0; padding: 24px; }
+      .wrap { max-width: 460px; margin: 0 auto; }
+      h1 { font-size: 18px; }
+      label { display: block; margin: 16px 0 6px; color: #9aa0aa; }
+      input { width: 100%; box-sizing: border-box; padding: 9px 11px; border-radius: 8px; border: 1px solid #26262f; background: #16161d; color: #fff; }
+      button { margin-top: 18px; padding: 9px 16px; border: 0; border-radius: 8px; background: #e50914; color: #fff; font-weight: 600; cursor: pointer; }
+      .hint { color: #9aa0aa; font-size: 12px; margin-top: 6px; }
+      #msg { margin-left: 10px; color: #6ee7a8; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>netflixme sync</h1>
+      <p class="hint">Find both values in your netflixme app under <b>Setup</b>.</p>
+      <label for="url">netflixme URL</label>
+      <input id="url" placeholder="http://localhost:3000" />
+      <label for="token">Ingest token</label>
+      <input id="token" placeholder="paste the token from Setup" />
+      <div>
+        <button id="save">Save</button>
+        <span id="msg"></span>
+      </div>
+      <p class="hint">
+        Saving asks for permission to reach your netflixme URL. Then open Netflix (logged in) and
+        click the extension to sync.
+      </p>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>

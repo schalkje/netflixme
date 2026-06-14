@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { CatalogItem, ConfigStatus, UserStatus } from "@/lib/types";
 import type { ActionKind } from "@/lib/actions";
@@ -17,17 +17,24 @@ const ACTION_STATUS: Partial<Record<ActionKind, UserStatus | null>> = {
   remove: null,
 };
 
+function timeAgo(ts?: number): string {
+  if (!ts) return "never";
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
 export default function CatalogApp() {
   const [config, setConfig] = useState<ConfigStatus | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
   const [showCsv, setShowCsv] = useState(false);
-  const didInitialConnect = useRef(false);
 
   const flash = useCallback((msg: string) => {
     setToast(msg);
@@ -59,53 +66,16 @@ export default function CatalogApp() {
     }
   }, []);
 
-  // Initial load.
   useEffect(() => {
     loadHealth();
   }, [loadHealth]);
 
-  // Reload catalog when filters change (debounced for the search box).
   useEffect(() => {
     const id = setTimeout(() => loadCatalog(filters), 300);
     return () => clearTimeout(id);
   }, [filters, loadCatalog]);
 
-  // If we just returned from Simkl OAuth, sync once.
-  useEffect(() => {
-    if (didInitialConnect.current) return;
-    if (typeof window === "undefined") return;
-    if (new URLSearchParams(window.location.search).get("connected") === "1") {
-      didInitialConnect.current = true;
-      window.history.replaceState({}, "", window.location.pathname);
-      flash("Connected to Simkl — syncing your library…");
-      doSync();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const patchFilters = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
-
-  async function doSync() {
-    setSyncing(true);
-    try {
-      const res = await fetch("/api/sync", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Sync failed");
-      flash(`Synced: ${data.seen} seen · ${data.mylist} my-list · ${data.dropped} hidden`);
-      await loadHealth();
-      await loadCatalog(filters);
-    } catch (e) {
-      flash(e instanceof Error ? e.message : "Sync failed");
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  async function disconnect() {
-    await fetch("/api/auth/simkl/disconnect", { method: "POST" });
-    await loadHealth();
-    flash("Disconnected from Simkl");
-  }
 
   function visibleAfter(status: UserStatus | null): boolean {
     if (filters.mylistOnly) return status === "mylist";
@@ -125,7 +95,7 @@ export default function CatalogApp() {
           type: item.type,
           title: item.title,
           imdbId: item.imdbId,
-          tmdbId: item.key.startsWith("tmdb:") ? Number(item.key.split(":")[2]) : undefined,
+          tmdbId: item.tmdbId,
         }),
       });
       if (!res.ok) {
@@ -167,6 +137,8 @@ export default function CatalogApp() {
     );
   }
 
+  const neverSynced = !config?.lastIngestAt;
+
   return (
     <main className="mx-auto max-w-7xl px-4 pb-24 pt-4 sm:px-6">
       {/* Header */}
@@ -176,25 +148,14 @@ export default function CatalogApp() {
             netflix<span className="text-brand">me</span>
           </h1>
           <p className="text-xs text-muted">
-            Netflix · {config?.region ?? "—"} ·{" "}
-            {config?.simklConnected ? "Simkl connected" : "Simkl not connected"}
+            Netflix · {config?.region ?? "—"} · {config?.seenCount ?? 0} seen ·{" "}
+            {config?.mylistCount ?? 0} in list · synced {timeAgo(config?.lastIngestAt)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {config?.simklConnected ? (
-            <>
-              <button className="btn-ghost" onClick={doSync} disabled={syncing}>
-                {syncing ? "Syncing…" : "↻ Sync"}
-              </button>
-              <button className="btn-ghost" onClick={disconnect}>
-                Disconnect
-              </button>
-            </>
-          ) : (
-            <a className="btn-primary" href="/api/auth/simkl">
-              Connect Simkl
-            </a>
-          )}
+          <button className="btn-ghost" onClick={() => loadCatalog(filters)} disabled={loading}>
+            ↻ Refresh
+          </button>
           <button className="btn-ghost" onClick={() => setShowCsv(true)}>
             Import CSV
           </button>
@@ -204,11 +165,14 @@ export default function CatalogApp() {
         </div>
       </header>
 
-      {!config?.simklConnected && (
+      {neverSynced && (
         <div className="mb-4 rounded-lg border border-edge bg-panel/60 p-3 text-sm text-muted">
-          Connect Simkl to auto-hide what you&apos;ve already watched and sync your list across
-          devices. Install Simkl&apos;s “Enhancer for Netflix” extension to auto-track desktop
-          watching, and use <b>Import CSV</b> for TV/phone history.
+          To auto-hide what you&apos;ve already watched, install the{" "}
+          <b>netflixme sync</b> browser extension (reads your Netflix history + My List — see{" "}
+          <Link href="/setup" className="text-brand underline">
+            Setup
+          </Link>
+          ), or use <b>Import CSV</b> for a one-off, zero-setup backfill.
         </div>
       )}
 
@@ -260,6 +224,7 @@ export default function CatalogApp() {
           onDone={() => {
             loadHealth();
             loadCatalog(filters);
+            flash("Imported — re-checking catalog");
           }}
         />
       )}
