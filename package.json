@@ -1,0 +1,28 @@
+{
+  "name": "netflixme",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A better Netflix UI: hides what you've seen, manages your list, shows IMDb scores. Built on Simkl + TMDB, deep-links to Netflix to play.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "15.5.19",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.7",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "autoprefixer": "10.4.20",
+    "eslint": "9.39.4",
+    "eslint-config-next": "15.5.19",
+    "postcss": "8.5.10",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.7.3"
+  }
+}

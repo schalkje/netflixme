@@ -1,0 +1,24 @@
+{
+  "name": "netflixme",
+  "short_name": "netflixme",
+  "description": "A better Netflix UI — hides what you've seen, manages your list, shows IMDb scores.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0b0f",
+  "theme_color": "#0b0b0f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
