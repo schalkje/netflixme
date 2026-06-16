@@ -13,10 +13,11 @@ const ACTIVE = /…|Looking|Reading|Sending/; // status strings that mean "in pr
 
 function render() {
   chrome.storage.local.get(
-    ["backendUrl", "token", "statusText", "statusAt", "lastSync", "lastResult", "lastError"],
+    ["backendUrl", "token", "statusText", "statusAt", "lastSync", "lastResult", "lastError", "lastDiag"],
     (c) => {
       const status = $("status");
       const detail = $("detail");
+      $("diag").textContent = c.lastError && c.lastDiag ? "diag: " + JSON.stringify(c.lastDiag) : "";
 
       if (!c.backendUrl || !c.token) {
         status.className = "err";

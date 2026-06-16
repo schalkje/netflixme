@@ -38,43 +38,60 @@ async function postIngest(history, myList) {
 // so it can use your logged-in session. It must be fully self-contained.
 async function netflixReader() {
   const log = (...a) => console.log("[netflixme reader]", ...a);
+  const out = { history: [], myList: [], diag: {} };
+
   let buildId = null;
   try {
     buildId = window.netflix.reactContext.models.serverDefs.data.BUILD_IDENTIFIER;
   } catch (e) {
     /* not ready */
   }
-  if (!buildId) {
-    return { error: "Couldn't read your Netflix session. Make sure you're logged in on this tab, then reload netflix.com and try again." };
+  out.diag.buildId = Boolean(buildId);
+  try {
+    out.diag.host = location.host;
+    out.diag.loggedIn = Boolean(
+      window.netflix.reactContext.models.userInfo &&
+        window.netflix.reactContext.models.userInfo.data &&
+        window.netflix.reactContext.models.userInfo.data.authURL
+    );
+  } catch (e) {
+    /* ignore */
   }
-  log("build id", buildId);
+  if (!buildId) {
+    out.error =
+      "Couldn't read your Netflix session. Open netflix.com, log in, pick a profile, then Sync again.";
+    return out;
+  }
+  log("build id", buildId, "diag", out.diag);
 
-  const history = [];
+  // --- viewing history ---
   try {
     for (let pg = 0; pg < 100; pg++) {
       const res = await fetch(
         `https://www.netflix.com/api/shakti/${buildId}/viewingactivity?pg=${pg}`,
         { credentials: "include", headers: { Accept: "application/json" } }
       );
+      if (pg === 0) out.diag.vaStatus = res.status;
       if (!res.ok) {
         log("history stopped, http", res.status);
         break;
       }
       const data = await res.json();
+      if (pg === 0) out.diag.vaKeys = Object.keys(data || {});
       const items = (data && data.viewedItems) || [];
       if (!items.length) break;
       for (const it of items) {
         const title = it.seriesTitle || it.title;
         const netflixId = String(it.series || it.movieID || "");
-        if (title) history.push({ title, netflixId });
+        if (title) out.history.push({ title, netflixId });
       }
-      log("history page", pg, "→", history.length, "rows");
+      log("history page", pg, "→", out.history.length, "rows");
     }
   } catch (e) {
-    return { error: "Reading viewing history failed: " + ((e && e.message) || e) };
+    out.diag.vaError = String((e && e.message) || e);
   }
 
-  let myList = [];
+  // --- My List (best-effort) ---
   try {
     const body = new URLSearchParams();
     body.append("path", JSON.stringify(["mylist", { from: 0, to: 499 }, ["title"]]));
@@ -87,6 +104,7 @@ async function netflixReader() {
         body: body.toString(),
       }
     );
+    out.diag.mlStatus = res.status;
     if (res.ok) {
       const data = await res.json();
       const videos =
@@ -96,15 +114,15 @@ async function netflixReader() {
       for (const id in videos) {
         const t = videos[id] && videos[id].title;
         const s = typeof t === "string" ? t : t && t.value;
-        if (typeof s === "string") myList.push(s);
+        if (typeof s === "string") out.myList.push(s);
       }
     }
-    log("my list →", myList.length, "items");
+    log("my list →", out.myList.length, "items");
   } catch (e) {
-    log("my list read failed (non-fatal)", e);
+    out.diag.mlError = String((e && e.message) || e);
   }
 
-  return { history, myList };
+  return out;
 }
 
 async function syncNow(reason) {
@@ -145,8 +163,27 @@ async function syncNow(reason) {
     });
     return;
   }
+  log("reader diag", result.diag, "history", (result.history || []).length, "mylist", (result.myList || []).length);
   if (result.error) {
-    await setStatus("Netflix read failed", { lastError: result.error });
+    await setStatus("Netflix read failed", { lastError: result.error, lastDiag: result.diag });
+    return;
+  }
+
+  const total = (result.history || []).length + (result.myList || []).length;
+  if (total === 0) {
+    const d = result.diag || {};
+    let hint;
+    if (d.vaStatus && d.vaStatus !== 200) {
+      hint =
+        `Netflix's viewing-activity API returned HTTP ${d.vaStatus}. ` +
+        "You're likely on the 'Who's watching?' screen or not fully logged in — open a profile and the main Netflix browse page, then Sync again.";
+    } else {
+      hint =
+        "Netflix returned no viewing history" +
+        (d.vaKeys ? ` (response keys: ${d.vaKeys.join(", ") || "none"})` : "") +
+        ". Open a profile and browse Netflix, then Sync. If it persists, the Netflix API may have changed — use Import CSV as a fallback.";
+    }
+    await setStatus("Netflix returned 0 items", { lastError: hint, lastDiag: d });
     return;
   }
 
