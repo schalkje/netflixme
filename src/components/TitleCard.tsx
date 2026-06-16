@@ -60,7 +60,7 @@ export default function TitleCard({
         {item.status && (
           <div
             className={`absolute right-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-              seen ? "bg-zinc-600/90" : never ? "bg-red-900/90" : "bg-brand/90"
+              never ? "bg-red-900/90" : "bg-brand/90"
             }`}
           >
             {STATUS_LABEL[item.status]}
