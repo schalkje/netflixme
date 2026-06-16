@@ -40,6 +40,28 @@ async function netflixReader() {
   const log = (...a) => console.log("[netflixme reader]", ...a);
   const out = { history: [], myList: [], diag: {} };
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Netflix's edge intermittently returns 421 (Misdirected Request) to fetches on
+  // a long-open tab's coalesced HTTP/2 connection. Retry a few times; a transient
+  // 421/429/5xx often clears on a fresh attempt.
+  async function req(url, opts, tries) {
+    let last = 0;
+    for (let i = 0; i < (tries || 4); i++) {
+      let res;
+      try {
+        res = await fetch(url, Object.assign({ credentials: "include", cache: "no-store" }, opts));
+      } catch (e) {
+        last = -1;
+        await sleep(300 * (i + 1));
+        continue;
+      }
+      last = res.status;
+      if (res.status !== 421 && res.status !== 429 && res.status < 500) return res;
+      await sleep(300 * (i + 1));
+    }
+    return { ok: false, status: last, json: async () => ({}), text: async () => "" };
+  }
+
   let buildId = null;
   try {
     buildId = window.netflix.reactContext.models.serverDefs.data.BUILD_IDENTIFIER;
@@ -49,11 +71,7 @@ async function netflixReader() {
   out.diag.buildId = Boolean(buildId);
   try {
     out.diag.host = location.host;
-    out.diag.loggedIn = Boolean(
-      window.netflix.reactContext.models.userInfo &&
-        window.netflix.reactContext.models.userInfo.data &&
-        window.netflix.reactContext.models.userInfo.data.authURL
-    );
+    out.diag.path = location.pathname;
   } catch (e) {
     /* ignore */
   }
@@ -62,20 +80,19 @@ async function netflixReader() {
       "Couldn't read your Netflix session. Open netflix.com, log in, pick a profile, then Sync again.";
     return out;
   }
-  log("build id", buildId, "diag", out.diag);
+  log("build id", buildId);
 
-  // --- viewing history ---
+  const API = `https://www.netflix.com/api/shakti/${buildId}`;
+  const jsonHeaders = { Accept: "application/json" };
+
+  // --- viewing history (REST), with retry ---
   try {
     for (let pg = 0; pg < 100; pg++) {
-      const res = await fetch(
-        `https://www.netflix.com/api/shakti/${buildId}/viewingactivity?pg=${pg}`,
-        { credentials: "include", headers: { Accept: "application/json" } }
-      );
-      if (pg === 0) out.diag.vaStatus = res.status;
-      if (!res.ok) {
-        log("history stopped, http", res.status);
-        break;
+      const res = await req(`${API}/viewingactivity?pg=${pg}&pgSize=40`, { headers: jsonHeaders });
+      if (pg === 0) {
+        out.diag.vaStatus = res.status;
       }
+      if (!res.ok) break;
       const data = await res.json();
       if (pg === 0) out.diag.vaKeys = Object.keys(data || {});
       const items = (data && data.viewedItems) || [];
@@ -91,15 +108,14 @@ async function netflixReader() {
     out.diag.vaError = String((e && e.message) || e);
   }
 
-  // --- My List (best-effort) ---
+  // --- My List (Falcor pathEvaluator), with retry + real client params ---
   try {
     const body = new URLSearchParams();
     body.append("path", JSON.stringify(["mylist", { from: 0, to: 499 }, ["title"]]));
-    const res = await fetch(
-      `https://www.netflix.com/api/shakti/${buildId}/pathEvaluator?method=get`,
+    const res = await req(
+      `${API}/pathEvaluator?method=get&falcor_server=0.1.0&materialize=true`,
       {
         method: "POST",
-        credentials: "include",
         headers: { "content-type": "application/x-www-form-urlencoded", Accept: "application/json" },
         body: body.toString(),
       }
@@ -120,6 +136,45 @@ async function netflixReader() {
     log("my list →", out.myList.length, "items");
   } catch (e) {
     out.diag.mlError = String((e && e.message) || e);
+  }
+
+  // --- Fallback: if the API gave us no history, scrape the viewing-activity page's
+  //     embedded falcorCache (a normal document GET, not the 421-prone API). ---
+  if (out.history.length === 0) {
+    try {
+      const res = await req("https://www.netflix.com/viewingactivity", {
+        headers: { Accept: "text/html" },
+      });
+      out.diag.htmlStatus = res.status;
+      if (res.ok) {
+        const html = await res.text();
+        const m = html.match(/netflix\.falcorCache\s*=\s*(\{[\s\S]*?\})\s*;\s*<\/script>/);
+        if (m) {
+          let cache = null;
+          try {
+            cache = JSON.parse(m[1]);
+          } catch (e) {
+            out.diag.htmlParse = "json-fail";
+          }
+          const videos = (cache && cache.videos) || {};
+          let n = 0;
+          for (const id in videos) {
+            const t = videos[id] && videos[id].title;
+            const s = typeof t === "string" ? t : t && t.value;
+            if (typeof s === "string") {
+              out.history.push({ title: s, netflixId: String(id) });
+              n++;
+            }
+          }
+          out.diag.htmlVideos = n;
+          log("html fallback →", n, "titles");
+        } else {
+          out.diag.htmlParse = "no-cache";
+        }
+      }
+    } catch (e) {
+      out.diag.htmlError = String((e && e.message) || e);
+    }
   }
 
   return out;
