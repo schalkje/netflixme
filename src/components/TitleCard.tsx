@@ -87,7 +87,7 @@ export default function TitleCard({
             href={item.playUrl}
             target="_blank"
             rel="noreferrer"
-            className="btn-primary w-full"
+            className={`${seen || never ? "btn-ghost" : "btn-primary"} w-full`}
             title={
               item.playIsSearch
                 ? "Opens a Netflix search for this title (exact deep-link unavailable)"
