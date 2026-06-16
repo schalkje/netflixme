@@ -29,6 +29,10 @@ export default function TitleCard({
   onAction: (action: ActionKind) => void;
 }) {
   const inList = item.status === "mylist";
+  const seen = item.status === "seen";
+  const never = item.status === "dropped" || item.status === "hidden";
+  // Tint posters by status: seen -> grayscale, never-again -> grayscale + red wash.
+  const toneClass = seen ? "grayscale opacity-75" : never ? "grayscale opacity-90" : "";
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-lg bg-panel ring-1 ring-edge/60">
       <div className="relative aspect-[2/3] w-full bg-edge">
@@ -38,18 +42,27 @@ export default function TitleCard({
             src={item.poster}
             alt={item.title}
             loading="lazy"
-            className="h-full w-full object-cover"
+            className={`h-full w-full object-cover ${toneClass}`}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center p-3 text-center text-xs text-muted">
+          <div
+            className={`flex h-full w-full items-center justify-center p-3 text-center text-xs text-muted ${toneClass}`}
+          >
             {item.title}
           </div>
+        )}
+        {never && (
+          <div className="pointer-events-none absolute inset-0 bg-red-800/35 mix-blend-multiply" />
         )}
         <div className="absolute left-1.5 top-1.5">
           <ImdbBadge rating={item.imdbRating} />
         </div>
         {item.status && (
-          <div className="absolute right-1.5 top-1.5 rounded bg-brand/90 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+          <div
+            className={`absolute right-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+              seen ? "bg-zinc-600/90" : never ? "bg-red-900/90" : "bg-brand/90"
+            }`}
+          >
             {STATUS_LABEL[item.status]}
           </div>
         )}

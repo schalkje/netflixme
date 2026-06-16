@@ -23,7 +23,11 @@ export function toQueryString(f: Filters): string {
   p.set("type", f.type);
   p.set("sort", f.sort);
   p.set("pages", String(f.pages));
-  if (f.showSeen) p.set("showSeen", "1");
+  // "Showing seen" reveals watched AND never-again titles (styled grey / grey-red).
+  if (f.showSeen) {
+    p.set("showSeen", "1");
+    p.set("showDropped", "1");
+  }
   if (f.mylistOnly) p.set("mylistOnly", "1");
   if (f.minImdb > 0) p.set("minImdb", String(f.minImdb));
   if (f.q.trim()) p.set("q", f.q.trim());

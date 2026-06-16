@@ -65,7 +65,7 @@ export default function FilterBar({
           className={filters.showSeen ? "chip chip-on" : "chip"}
           onClick={() => onChange({ showSeen: !filters.showSeen })}
         >
-          {filters.showSeen ? "Showing seen" : "Hiding seen"}
+          {filters.showSeen ? "Showing seen + hidden" : "Hiding seen"}
         </button>
         <button
           className={filters.mylistOnly ? "chip chip-on" : "chip"}

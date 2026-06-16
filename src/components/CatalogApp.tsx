@@ -79,8 +79,11 @@ export default function CatalogApp() {
 
   function visibleAfter(status: UserStatus | null): boolean {
     if (filters.mylistOnly) return status === "mylist";
-    if (status === "seen" && !filters.showSeen) return false;
-    if (status === "dropped" || status === "hidden") return false;
+    // When "Showing seen" is on, seen + never-again stay visible (tinted);
+    // otherwise they drop out of the catalog.
+    if (status === "seen" || status === "dropped" || status === "hidden") {
+      return filters.showSeen;
+    }
     return true;
   }
 
