@@ -5,23 +5,9 @@ import { configStatus } from "@/lib/settings";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function readText(req: NextRequest): Promise<string> {
-  const ct = req.headers.get("content-type") || "";
-  if (ct.includes("multipart/form-data")) {
-    const form = await req.formData();
-    const file = form.get("file");
-    if (file && typeof file !== "string") return await file.text();
-    const text = form.get("text");
-    return typeof text === "string" ? text : "";
-  }
-  if (ct.includes("application/json")) {
-    const body = (await req.json().catch(() => ({}))) as { text?: string };
-    return body.text || "";
-  }
-  return await req.text();
-}
-
-// Upload the Netflix viewing-activity CSV. ?preview=1 parses without writing.
+// Accepts either:
+//  - JSON { titles: string[] }  → process this batch (client parses + batches for progress)
+//  - multipart file / { text }  → parse server-side then process (fallback)
 export async function POST(req: NextRequest) {
   const cfg = configStatus();
   if (!cfg.hasTmdb) {
@@ -31,23 +17,43 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const text = await readText(req);
-  const titles = parseNetflixCsv(text);
-  if (titles.length === 0) {
-    return NextResponse.json({ error: "No titles found in CSV." }, { status: 400 });
+  const ct = req.headers.get("content-type") || "";
+  let titles: string[] = [];
+
+  try {
+    if (ct.includes("application/json")) {
+      const body = (await req.json().catch(() => ({}))) as { titles?: string[]; text?: string };
+      if (Array.isArray(body.titles)) titles = body.titles;
+      else if (typeof body.text === "string") titles = parseNetflixCsv(body.text);
+    } else if (ct.includes("multipart/form-data")) {
+      const form = await req.formData();
+      const file = form.get("file");
+      const text =
+        file && typeof file !== "string" ? await file.text() : String(form.get("text") || "");
+      titles = parseNetflixCsv(text);
+    } else {
+      titles = parseNetflixCsv(await req.text());
+    }
+  } catch {
+    return NextResponse.json({ error: "Could not read the request." }, { status: 400 });
   }
 
-  const preview = req.nextUrl.searchParams.get("preview") === "1";
-  if (preview) {
-    return NextResponse.json({ count: titles.length, sample: titles.slice(0, 25) });
+  titles = titles.map((t) => t.trim()).filter(Boolean);
+  if (titles.length === 0) {
+    return NextResponse.json({ error: "No titles to import." }, { status: 400 });
   }
 
   try {
     const result = await backfillFromCsv(titles);
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({
+      ok: true,
+      total: result.total,
+      matched: result.matched.length,
+      unmatched: result.unmatched,
+    });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Backfill failed" },
+      { error: e instanceof Error ? e.message : "Import failed" },
       { status: 502 }
     );
   }
