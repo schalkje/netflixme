@@ -138,42 +138,85 @@ async function netflixReader() {
     out.diag.mlError = String((e && e.message) || e);
   }
 
-  // --- Fallback: if the API gave us no history, scrape the viewing-activity page's
-  //     embedded falcorCache (a normal document GET, not the 421-prone API). ---
+  // --- Fallbacks via the embedded falcorCache (a normal document GET, which is
+  //     NOT served by the 421-prone API gateway). Slice the JSON object out by
+  //     brace-matching (regex can't reliably grab the big nested object). ---
+  function sliceObject(s, from) {
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = from; i < s.length; i++) {
+      const c = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+      } else if (c === '"') inStr = true;
+      else if (c === "{") depth++;
+      else if (c === "}") {
+        depth--;
+        if (depth === 0) return s.slice(from, i + 1);
+      }
+    }
+    return null;
+  }
+  async function falcorCacheFrom(url) {
+    const res = await req(url, { headers: { Accept: "text/html" } });
+    const status = res.status;
+    if (!res.ok) return { status, cache: null, note: "http" };
+    const html = await res.text();
+    const at = html.indexOf("falcorCache");
+    if (at < 0) return { status, cache: null, note: "no-falcorCache" };
+    const brace = html.indexOf("{", html.indexOf("=", at));
+    const jsonStr = brace >= 0 ? sliceObject(html, brace) : null;
+    if (!jsonStr) return { status, cache: null, note: "no-object" };
+    try {
+      return { status, cache: JSON.parse(jsonStr) };
+    } catch (e) {
+      return { status, cache: null, note: "json-fail" };
+    }
+  }
+  function videoTitles(cache) {
+    const res = [];
+    const videos = (cache && cache.videos) || {};
+    for (const id in videos) {
+      let t = videos[id] && videos[id].title;
+      if (t && typeof t === "object") t = t.value;
+      if (typeof t === "string") res.push({ title: t, netflixId: String(id) });
+    }
+    return res;
+  }
+
   if (out.history.length === 0) {
     try {
-      const res = await req("https://www.netflix.com/viewingactivity", {
-        headers: { Accept: "text/html" },
-      });
-      out.diag.htmlStatus = res.status;
-      if (res.ok) {
-        const html = await res.text();
-        const m = html.match(/netflix\.falcorCache\s*=\s*(\{[\s\S]*?\})\s*;\s*<\/script>/);
-        if (m) {
-          let cache = null;
-          try {
-            cache = JSON.parse(m[1]);
-          } catch (e) {
-            out.diag.htmlParse = "json-fail";
-          }
-          const videos = (cache && cache.videos) || {};
-          let n = 0;
-          for (const id in videos) {
-            const t = videos[id] && videos[id].title;
-            const s = typeof t === "string" ? t : t && t.value;
-            if (typeof s === "string") {
-              out.history.push({ title: s, netflixId: String(id) });
-              n++;
-            }
-          }
-          out.diag.htmlVideos = n;
-          log("html fallback →", n, "titles");
-        } else {
-          out.diag.htmlParse = "no-cache";
-        }
+      const r = await falcorCacheFrom("https://www.netflix.com/viewingactivity");
+      out.diag.htmlStatus = r.status;
+      if (r.note) out.diag.htmlNote = r.note;
+      if (r.cache) {
+        out.diag.fcKeys = Object.keys(r.cache).slice(0, 30);
+        const titles = videoTitles(r.cache);
+        out.diag.fcVideos = titles.length;
+        out.diag.fcSample = titles.slice(0, 3).map((x) => x.title);
+        for (const t of titles) out.history.push(t);
+        log("html history fallback →", titles.length, "titles");
       }
     } catch (e) {
       out.diag.htmlError = String((e && e.message) || e);
+    }
+  }
+
+  if (out.myList.length === 0) {
+    try {
+      const r = await falcorCacheFrom("https://www.netflix.com/browse/my-list");
+      out.diag.mlHtmlStatus = r.status;
+      if (r.cache) {
+        const titles = videoTitles(r.cache).map((x) => x.title);
+        out.diag.mlHtmlVideos = titles.length;
+        for (const t of titles) out.myList.push(t);
+        log("html my-list fallback →", titles.length, "titles");
+      }
+    } catch (e) {
+      out.diag.mlHtmlError = String((e && e.message) || e);
     }
   }
 
