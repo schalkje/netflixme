@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>netflixme sync</title>
+    <style>
+      body { font: 13px system-ui, sans-serif; background: #0b0b0f; color: #f5f5f7; margin: 0; padding: 14px; width: 260px; }
+      h1 { font-size: 15px; margin: 0 0 10px; }
+      .brand { color: #e50914; }
+      .label { color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-top: 10px; }
+      #status { color: #f5f5f7; min-height: 18px; margin-top: 2px; }
+      #detail { font-size: 12px; margin-top: 2px; min-height: 16px; }
+      .ok { color: #6ee7a8; }
+      .err { color: #ff8585; }
+      .muted { color: #9aa0aa; }
+      .row { display: flex; gap: 8px; margin-top: 14px; }
+      button { flex: 1; padding: 8px; border: 0; border-radius: 7px; font-weight: 600; cursor: pointer; }
+      #sync { background: #e50914; color: #fff; }
+      #options { background: #26262f; color: #fff; }
+      .spin { display: inline-block; animation: s 1s linear infinite; }
+      @keyframes s { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <h1>netflix<span class="brand">me</span> sync</h1>
+
+    <div class="label">Status</div>
+    <div id="status" class="muted">…</div>
+    <div id="detail"></div>
+
+    <div class="label">Last sync</div>
+    <div id="lastsync" class="muted">—</div>
+
+    <div id="diag" class="muted" style="font-size:11px; margin-top:8px; word-break:break-all;"></div>
+
+    <div class="row">
+      <button id="sync">Sync now</button>
+      <button id="options">Options</button>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

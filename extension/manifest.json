@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "netflixme sync",
+  "version": "0.4.0",
+  "description": "Reads your Netflix viewing history & My List from your logged-in session and syncs them to your netflixme app.",
+  "permissions": ["storage", "alarms", "tabs", "scripting"],
+  "host_permissions": ["https://*.netflix.com/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "netflixme sync" },
+  "options_page": "options.html"
+}
